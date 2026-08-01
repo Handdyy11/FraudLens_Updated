@@ -26,18 +26,15 @@ public class FraudAnalysisService {
 
     private final List<FraudDetector> detectors = Arrays.asList(
             new CycleDetector(),
-            new HubDetector(),
-            new RapidHopDetector(),
-            new ThresholdDetector());
+            new HubDetector());
 
-    private final PropagationScorer propagationScorer = new PropagationScorer();
     private final BehaviourAnalyzer behaviourAnalyzer = new BehaviourAnalyzer();
 
     private List<Account> accounts;
     private List<Transaction> transactions;
 
     private List<FraudAlert> lastAlerts;
-    private Map<String, Double> propagationScores;
+    private Map<String, Double> propagationScores = Collections.emptyMap();
     private Map<String, Integer> behaviourScores;
     private Map<String, Integer> patternScores;
 
@@ -57,8 +54,7 @@ public class FraudAnalysisService {
             lastAlerts.addAll(detector.detect(graph));
         }
 
-        Set<String> fraudAccounts = getFraudAccountIds();
-        propagationScores = propagationScorer.computeScores(graph, fraudAccounts);
+        propagationScores = Collections.emptyMap();
         behaviourScores = behaviourAnalyzer.analyse(accounts, transactions);
         patternScores = computePatternScores();
 
@@ -75,54 +71,15 @@ public class FraudAnalysisService {
     }
 
     // ── Pattern score constants ───────────────────────────────────────────────
-    //
-    // These scores feed into computePatternScores(). The weighted formula
-    // is applied for RAPID_HOP, THRESHOLD, and HUB accounts.
-    // CYCLE accounts bypass the formula entirely — see computeFinalRiskScore().
-    //
-    // | Pattern | Severity | Confidence | Score |
-    // |------------|----------|------------|-------|
-    // | CYCLE | CRITICAL | HIGH | 100 | bypasses formula → always FRAUD |
-    // | RAPID_HOP | CRITICAL | MODERATE | 60 | 60×0.60 = 36, +behaviour →
-    // SUSPICIOUS |
-    // | THRESHOLD | HIGH | MODERATE | 50 | 50×0.60 = 30, +behaviour → SUSPICIOUS |
-    // | HUB | HIGH | LOW | 40 | 40×0.60 = 24, secondary signal |
-
     private static final int CYCLE_SCORE = 100;
-    private static final int RAPID_HOP_SCORE = 50;
-    private static final int THRESHOLD_SCORE = 50;
     private static final int HUB_SCORE = 50;
     private static final int DEFAULT_ALERT_SCORE = 40;
-
-    // ── Base + Bonus Additive Model ──────────────────────────────────────────
-    //
-    // Final Risk = Base Pattern Score + (Propagation Bonus) + (Behaviour Bonus)
-    //
-    // Why this model:
-    // - Pattern (Base): Direct fraud evidence. A strong pattern (like 50) instantly 
-    //   pushes an account into SUSPICIOUS territory on its own.
-    // - Propagation (Bonus): Proximity to fraud nodes adds up to 25 points.
-    // - Behaviour (Bonus): Abnormal behaviour adds up to 14 points of supporting evidence.
-    //
-    // Result tiers:
-    // - Fraud pattern account → pattern score 50 → final 50-89 (SUSPICIOUS/FRAUD)
-    // - Multiple pattern account → pattern score 100 → final 100 (FRAUD)
-    // - Linked account → propagation up to ~25 → final ~25 (AT_RISK)
-    // - Innocent account → all zeros → final 0
-
-    private static final double WEIGHT_PROPAGATION = 0.25;
-    private static final double WEIGHT_BEHAVIOUR = 0.14;
-
-    // BehaviourAnalyzer max score is 100 (40+35+25). Used for normalisation.
-    private static final double MAX_BEHAVIOUR_RAW = 100.0;
 
     private Map<String, Integer> computePatternScores() {
         Map<String, Integer> scores = new HashMap<>();
         for (FraudAlert alert : lastAlerts) {
             int contribution = switch (alert.getType()) {
                 case "CYCLE" -> CYCLE_SCORE;
-                case "RAPID_HOP" -> RAPID_HOP_SCORE;
-                case "THRESHOLD" -> THRESHOLD_SCORE;
                 case "HUB" -> HUB_SCORE;
                 default -> DEFAULT_ALERT_SCORE;
             };
@@ -138,14 +95,8 @@ public class FraudAnalysisService {
      * Computes the final risk score for one account.
      *
      * CYCLE accounts are short-circuited to 100 (always FRAUD).
-     * Circular money flow (A→B→C→A) is textbook money laundering.
      *
-     * All other accounts use the Base + Bonus formula:
-     * Final Risk = patternScore
-     * + (propagationScore × 0.50)
-     * + (normalisedBehaviourScore × 0.20)
-     *
-     * Behaviour is normalised from 0–100 → 0–100 before applying weight.
+     * All other accounts: Final Risk = patternScore (HUB: 50) + behaviourScore (0–50).
      * Result clamped to [0, 100].
      */
     private int computeFinalRiskScore(String accountId) {
@@ -157,14 +108,9 @@ public class FraudAnalysisService {
             return 100;
 
         double pattern = patternScores.getOrDefault(accountId, 0);
-        double propagation = propagationScores.getOrDefault(accountId, 0.0);
-
         double behaviourRaw = behaviourScores.getOrDefault(accountId, 0);
-        double behaviourNormalised = (behaviourRaw / MAX_BEHAVIOUR_RAW) * 100.0;
 
-        double finalScore = pattern 
-                + (propagation * WEIGHT_PROPAGATION)
-                + (behaviourNormalised * WEIGHT_BEHAVIOUR);
+        double finalScore = pattern + behaviourRaw;
 
         return Math.min((int) Math.round(finalScore), 100);
     }
@@ -220,13 +166,6 @@ public class FraudAnalysisService {
         return map;
     }
 
-    private void ensureAccountExists(String id) {
-        boolean exists = accounts.stream().anyMatch(a -> a.getAccountId().equals(id));
-        if (!exists) {
-            accounts.add(new Account(id, "User " + id));
-        }
-    }
-
     // ── Public accessors ──────────────────────────────────────────────────────
 
     public TransactionGraph getGraph() {
@@ -269,19 +208,6 @@ public class FraudAnalysisService {
                 .distinct().collect(Collectors.toList());
     }
 
-    public List<String> getRapidHops() {
-        return lastAlerts.stream()
-                .filter(a -> a.getType().equals("RAPID_HOP"))
-                .flatMap(a -> a.getInvolvedAccounts().stream())
-                .distinct().collect(Collectors.toList());
-    }
-
-    public List<String> getThresholds() {
-        return lastAlerts.stream()
-                .filter(a -> a.getType().equals("THRESHOLD"))
-                .flatMap(a -> a.getInvolvedAccounts().stream())
-                .distinct().collect(Collectors.toList());
-    }
 
     public Set<String> getFraudAccountIds() {
         Set<String> fraud = new HashSet<>();
@@ -379,14 +305,12 @@ public class FraudAnalysisService {
             distribution.merge(acc.getRiskLevel(), 1L, Long::sum);
         }
 
-        int cycles = 0, hubs = 0, rapids = 0;
+        int cycles = 0, hubs = 0;
         for (FraudAlert alert : lastAlerts) {
             if (alert.getType().equals("CYCLE"))
                 cycles++;
             else if (alert.getType().equals("HUB"))
                 hubs += alert.getInvolvedAccounts().size();
-            else if (alert.getType().equals("RAPID_HOP"))
-                rapids += alert.getInvolvedAccounts().size();
         }
 
         Map<String, Object> stats = new LinkedHashMap<>();
@@ -395,7 +319,7 @@ public class FraudAnalysisService {
         stats.put("edgeCount", edgeKeys.size());
         stats.put("cyclesDetected", cycles);
         stats.put("hubAccounts", hubs);
-        stats.put("rapidHopAlerts", rapids);
+        stats.put("rapidHopAlerts", 0);
         stats.put("fraudAlerts", lastAlerts.size());
         stats.put("riskDistribution", distribution);
         return stats;

@@ -39,18 +39,14 @@ async function refreshAlerts() {
   const list = document.getElementById('alert-list');
   if (!list) return;
   try {
-    const [cycles, hubs, rapids, thresholds] = await Promise.all([
+    const [cycles, hubs] = await Promise.all([
       fetchJSON(`${API}/fraud/cycles`),
-      fetchJSON(`${API}/fraud/hubs`),
-      fetchJSON(`${API}/fraud/rapid-hops`),
-      fetchJSON(`${API}/fraud/thresholds`)
+      fetchJSON(`${API}/fraud/hubs`)
     ]);
 
     const alerts = [];
     cycles.forEach(c => alerts.push({ type: 'CYCLE', desc: 'Circular pattern: ' + c.join(' → ') + ' → ' + c[0], accts: c }));
-    if (hubs.length)       alerts.push({ type: 'HUB',       desc: 'High-degree hub accounts detected',          accts: hubs });
-    if (rapids.length)     alerts.push({ type: 'RAPID_HOP',  desc: 'Rapid fund-layering within 5-minute window', accts: rapids });
-    if (thresholds.length) alerts.push({ type: 'THRESHOLD',  desc: 'Structuring / smurfing below reporting threshold', accts: thresholds });
+    if (hubs.length) alerts.push({ type: 'HUB', desc: 'High-degree hub accounts detected', accts: hubs });
 
     setText('alert-count', alerts.length + ' alert' + (alerts.length !== 1 ? 's' : ''));
 

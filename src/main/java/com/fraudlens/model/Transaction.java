@@ -11,13 +11,7 @@ public class Transaction {
     private String type; // "NORMAL" or "FRAUD"
     private MerchantCategory category; // Transaction category
 
-    // Legacy constructor for backward compatibility
-    public Transaction(String txnId, String fromAccount, String toAccount,
-                       double amount, LocalDateTime timestamp, String type) {
-        this(txnId, fromAccount, toAccount, amount, timestamp, type, MerchantCategory.TRANSFER);
-    }
-
-    // Enhanced constructor with category
+    // Constructor with category
     public Transaction(String txnId, String fromAccount, String toAccount,
                        double amount, LocalDateTime timestamp, String type, MerchantCategory category) {
         this.txnId = txnId;

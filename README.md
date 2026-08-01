@@ -31,13 +31,12 @@ Representing transactions as a directed graph allows classical graph algorithms 
 ```mermaid
 graph TD
     A[DataSeeder] --> B[TransactionGraph]
-    B --> C[Fraud Detectors]
-    B --> D[Behaviour Analyzer]
-    C --> E[Propagation Scorer]
+    B --> C[CycleDetector & HubDetector]
+    B --> D[BehaviourAnalyzer]
+    C --> E[FraudAnalysisService]
     D --> E
-    E --> F[FraudAnalysisService]
-    F --> G[REST API - Spring Boot]
-    G --> H[Interactive Dashboard]
+    E --> F[REST API - Spring Boot]
+    F --> G[Interactive Dashboard]
 ```
 
 ## ✨ Key Features
@@ -45,8 +44,8 @@ graph TD
 - **Interactive Network Visualization**: Physics-based graph rendering using Vis.js.
 - **Custom Graph Engine**: Pure Java implementation of Directed Graphs, avoiding the overhead of external dependencies like Neo4j.
 - **Live Dashboard**: Auto-refreshing metrics showing total transactions, accounts monitored, and active fraud alerts.
-- **Algorithmic Threat Detection**: Employs classical computer science algorithms (DFS, BFS, Priority Queues, Sliding Windows) to detect specific fraud patterns.
-- **Dynamic Risk Scoring**: An additive risk model (`Base Pattern Score + Propagation Bonus + Behaviour Bonus`) that categorizes accounts into `NORMAL`, `AT_RISK`, `SUSPICIOUS`, and `FRAUD`.
+- **Algorithmic Threat Detection**: Employs classical computer science algorithms (DFS, Priority Queues) and rule-based statistical profiling to detect specific fraud patterns.
+- **Dynamic Risk Scoring**: A composite risk model (`Pattern Score + Behaviour Score`) that categorizes accounts into `NORMAL`, `AT_RISK`, `SUSPICIOUS`, and `FRAUD`.
 - **Realistic Data Simulation**: An automated `DataSeeder` that generates 100 accounts with distinct professions (Student, Salaried, Merchant), simulates organic lifestyle transactions, and injects sophisticated fraud topologies.
 
 ## 🧠 Algorithms & Detection Strategies
@@ -57,34 +56,31 @@ FraudLens relies on a suite of custom detectors:
 | :--- | :--- | :--- | :--- |
 | **Circular Laundering** | Detects funds moving in a closed loop (A → B → C → A) to obscure origin. | **Depth First Search (DFS)** + Recursion Stack | `O(V + E)` |
 | **Hub Accounts** | Identifies central "mule" accounts with abnormally high connection degrees. | **Max-Heap (Priority Queue)** | `O(n log k)` |
-| **Rapid Hops (Layering)** | Flags burst transactions where funds are rapidly hopped between accounts (e.g. 3+ txns in 5 mins). | **Sliding Window** (Two Pointers) | `O(n)` |
-| **Structuring / Smurfing** | Detects multiple transactions intentionally kept just below reporting thresholds. | Grouping & Aggregation | `O(n)` |
-| **Risk Propagation** | Contaminates accounts based on their proximity (degrees of separation) to known fraud nodes. | **Breadth First Search (BFS)** | `O(V + E)` |
-| **Behaviour Analysis** | Penalizes deviations from a profile's expected max amount, monthly frequency, and active hours. | Statistical Profiling | `O(n)` |
+| **Behaviour Analysis** | Penalizes deviations from a profile's expected max amount, monthly frequency, and active hours. | Statistical Profiling & Linear Interpolation | `O(n)` |
 
 ## 📊 Risk Scoring Logic
-The risk scoring follows an additive model:
-`Final Risk Score = Base Pattern Score + Propagation Bonus + Behaviour Bonus`
+The risk scoring follows a composite model:
+`Final Risk Score = Pattern Score + Behaviour Score`
 
-- **Base Pattern**: Accounts directly involved in Hubs, Cycles, or Rapid Hops receive a high baseline score (e.g., 100 for a Cycle).
-- **Propagation**: Accounts closely connected to flagged fraud nodes receive a propagation penalty calculated via BFS (closer proximity = higher penalty).
-- **Behaviour**: Accounts deviating from their expected financial profile (e.g., abnormally high amounts, excessive frequencies, off-hours) receive additional penalties.
+- **Pattern Score**: Accounts directly involved in Hubs or Cycles receive a baseline pattern score (e.g., 100 for a Cycle short-circuit, 50 for a Hub).
+- **Behaviour Score**: Accounts deviating from their expected financial profile (abnormally high amounts, excessive frequencies, off-hours) receive rule penalties up to 50 points.
 
 Scores are clamped between 0 and 100, dynamically categorizing accounts into 🟢 **NORMAL**, 🟡 **AT_RISK**, 🟠 **SUSPICIOUS**, or 🔴 **FRAUD**.
 
 ## 📐 Design Decisions
 - **Custom In-Memory Graph**: Chose native Java collections (`HashMap`, `ArrayList`) to build a directed graph from scratch instead of Neo4j to ensure lightweight, zero-dependency deployment for demonstration and educational purposes.
 - **Vanilla Frontend**: Used raw HTML, CSS Variables, and Vanilla JS over heavy SPA frameworks (React/Angular) to keep the project simple, highly performant, and easy to understand.
-- **Decoupled Detectors**: Each fraud pattern (Cycle, Hub, Rapid Hop) is implemented as a standalone strategy class, making the system highly extensible for future rules.
+- **Strategy Pattern Detectors**: Each fraud pattern (Cycle, Hub) implements a unified `FraudDetector` interface, making the system highly extensible for future rules.
 
 ## 🏗️ Project Structure
 ```text
 src/
 ├── main/java/com/fraudlens/
 │   ├── controller/      # REST API endpoints for the dashboard
-│   ├── data/            # DataSeeder, Salary & Lifestyle Generators
-│   ├── graph/           # Core Graph Engine, DFS/BFS Detectors, Propagation
+│   ├── data/            # DataSeeder, Salary & Lifestyle Generators, BehaviourProfiles
+│   ├── graph/           # Core Graph Engine, CycleDetector, HubDetector
 │   ├── model/           # Account, Transaction, FraudAlert Data Models
+│   ├── patterns/        # FraudDetector strategy interface
 │   └── service/         # FraudAnalysisService, BehaviourAnalyzer
 └── main/resources/static/ # Frontend UI (HTML, CSS, Vanilla JS)
 ```
@@ -93,14 +89,15 @@ src/
 FraudLens uses a highly realistic, procedurally generated simulated dataset created on startup:
 - **Accounts**: 100 accounts categorized by profession (Salaried, Student, Merchant).
 - **Organic Traffic**: Simulates monthly salaries, peer-to-peer transfers, and lifestyle purchases.
-- **Injected Fraud**: Hardcoded fraud topologies (cycles, hubs, rapid hops) are injected seamlessly without breaking realistic account balances.
+- **Injected Fraud**: Hardcoded fraud topologies (cycles, hubs) are injected seamlessly without breaking realistic account balances.
 
 ## 🚀 Future Scope
+- **Rapid Hops (Layering) Detector** – Implement a sliding window algorithm to flag high-frequency rapid transfers within 5-minute windows.
+- **Structuring / Smurfing Detector** – Detect transactions intentionally split below reporting thresholds.
+- **BFS Risk Propagation** – Propagate risk scores based on degrees of separation from confirmed fraud nodes.
 - **Real-Time Transaction Monitoring** – Support live transaction streams instead of simulated data.
-- **Explainable Risk Dashboard** – Display detailed evidence for each risk score (patterns, behaviour, propagation, and score breakdown).
-- **Historical Behaviour Learning** – Learn user behaviour from previous transaction history instead of predefined profession-based profiles.
-- **Configurable Fraud Detection Rules** – Allow thresholds (hub degree, rapid-hop window, transaction limits, etc.) to be modified from the dashboard.
-- **Analyst Investigation Workflow** – Enable investigators to mark accounts as Fraud, False Positive, or Under Investigation and add investigation notes.
+- **Explainable Risk Dashboard** – Display detailed evidence for each risk score (patterns, behaviour, score breakdown).
+- **Analyst Investigation Workflow** – Enable investigators to mark accounts as Fraud, False Positive, or Under Investigation and add notes.
 
 ## ⚠️ Current Limitations
 - Uses simulated UPI transaction data instead of real-time banking data.

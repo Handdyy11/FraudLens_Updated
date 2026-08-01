@@ -14,8 +14,6 @@ public enum MerchantCategory {
     ENTERTAINMENT(500, 3000),
     EDUCATION(1000, 8000),
     HOSPITAL(800, 5000),
-    RENT(8000, 20000),
-    SUBSCRIPTION(100, 1000),
     SALARY(0, 0);
 
     private final double minAmount;

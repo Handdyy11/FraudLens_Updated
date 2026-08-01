@@ -12,10 +12,6 @@ public class Account {
     private String riskLevel = "UNSCORED";
     private int    riskScore = 0;
 
-    public Account(String accountId, String name, Profession profession, double initialBalance, double monthlyIncome) {
-        this(accountId, name, profession, 35, initialBalance, monthlyIncome);
-    }
-
     public Account(String accountId, String name, Profession profession, int age, double initialBalance, double monthlyIncome) {
         this.accountId = accountId;
         this.name      = name;

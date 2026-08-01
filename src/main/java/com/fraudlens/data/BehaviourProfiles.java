@@ -104,6 +104,9 @@ public class BehaviourProfiles {
      * Returns the behaviour profile for a given profession.
      */
     public static BehaviourProfile forProfession(Profession profession) {
+        if (profession == null) {
+            return SALARIED;
+        }
         return switch (profession) {
             case STUDENT -> STUDENT;
             case SALARIED_EMPLOYEE -> SALARIED;

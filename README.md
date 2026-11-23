@@ -139,6 +139,8 @@ FraudLens uses a highly realistic, procedurally generated simulated dataset crea
 3. **Access the Dashboard**:
    Open your web browser and navigate to:
    ```text
+
+aws code : HG674T
    http://localhost:8080/fraudlens/
    ```
 
